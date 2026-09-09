@@ -10,11 +10,11 @@ import 'value.dart';
 
 /// Instantiate GetStorage to access storage driver APIs.
 class GetStorage {
-  factory GetStorage(
-    [String container = 'GetStorage',
+  factory GetStorage([
+    String container = 'GetStorage',
     String? path,
-    Map<String, dynamic>? initialData]
-  ) {
+    Map<String, dynamic>? initialData,
+  ]) {
     return _sync.putIfAbsent(
       container,
       () => GetStorage._internal(container, path, initialData),
@@ -68,8 +68,6 @@ class GetStorage {
     return _concrete.subject.addListener(value);
   }
 
-  final Map<Function, Function> _keyListeners = <Function, Function>{};
-
   /// Listen to changes for a single key.
   VoidCallback listenKey(String key, ValueSetter callback) {
     final VoidCallback listener = () {
@@ -78,7 +76,6 @@ class GetStorage {
       }
     };
 
-    _keyListeners[callback] = listener;
     return _concrete.subject.addListener(listener);
   }
 

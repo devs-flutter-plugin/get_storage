@@ -20,7 +20,9 @@ class _AppState extends State<App> {
 
   Future<void> _changeTheme(bool value) async {
     await _box.write('darkmode', value);
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override

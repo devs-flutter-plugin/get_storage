@@ -1,9 +1,7 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../value.dart';
@@ -17,59 +15,64 @@ class StorageImpl {
   final ValueStorage<Map<String, dynamic>> subject =
       ValueStorage<Map<String, dynamic>>(<String, dynamic>{});
 
-  RandomAccessFile? _randomAccessfile;
+  RandomAccessFile? _randomAccessFile;
 
-  void clear() async {
+  void clear() {
     subject
       ..value.clear()
-      ..changeValue("", null);
+      ..changeValue('', null);
   }
 
   Future<void> deleteBox() async {
+    await _randomAccessFile?.close();
+    _randomAccessFile = null;
+
     final box = await _fileDb(isBackup: false);
     final backup = await _fileDb(isBackup: true);
-    await Future.wait([box.delete(), backup.delete()]);
+
+    if (await box.exists()) await box.delete();
+    if (await backup.exists()) await backup.delete();
   }
 
   Future<void> flush() async {
-    final buffer = utf8.encode(json.encode(subject.value));
-    final length = buffer.length;
-    RandomAccessFile _file = await _getRandomFile();
+    final buffer = utf8.encode(jsonEncode(subject.value));
+    final file = await _getRandomFile();
 
-    _randomAccessfile = await _file.lock();
-    _randomAccessfile = await _randomAccessfile!.setPosition(0);
-    _randomAccessfile = await _randomAccessfile!.writeFrom(buffer);
-    _randomAccessfile = await _randomAccessfile!.truncate(length);
-    _randomAccessfile = await _file.unlock();
-    _madeBackup();
+    await file.lock();
+    try {
+      await file.setPosition(0);
+      await file.writeFrom(buffer);
+      await file.truncate(buffer.length);
+      await file.flush();
+    } finally {
+      await file.unlock();
+    }
+
+    await _makeBackup();
   }
 
-  void _madeBackup() {
-    _getFile(true).then(
-      (value) => value.writeAsString(
-        json.encode(subject.value),
-        flush: true,
-      ),
-    );
+  Future<void> _makeBackup() async {
+    final backup = await _getFile(true);
+    await backup.writeAsString(jsonEncode(subject.value), flush: true);
   }
 
-  T? read<T>(String key) {
-    return subject.value[key] as T?;
-  }
+  T? read<T>(String key) => subject.value[key] as T?;
 
-  T getKeys<T>() {
-    return subject.value.keys as T;
-  }
+  T getKeys<T>() => subject.value.keys as T;
 
-  T getValues<T>() {
-    return subject.value.values as T;
-  }
+  T getValues<T>() => subject.value.values as T;
 
   Future<void> init([Map<String, dynamic>? initialData]) async {
-    subject.value = initialData ?? <String, dynamic>{};
+    subject.value = Map<String, dynamic>.from(
+      initialData ?? const <String, dynamic>{},
+    );
 
-    RandomAccessFile _file = await _getRandomFile();
-    return _file.lengthSync() == 0 ? flush() : _readFile();
+    final file = await _getRandomFile();
+    if (await file.length() == 0) {
+      await flush();
+    } else {
+      await _readFile();
+    }
   }
 
   void remove(String key) {
@@ -86,68 +89,60 @@ class StorageImpl {
 
   Future<void> _readFile() async {
     try {
-      RandomAccessFile _file = await _getRandomFile();
-      _file = await _file.setPosition(0);
-      final buffer = new Uint8List(await _file.length());
-      await _file.readInto(buffer);
-      subject.value = json.decode(utf8.decode(buffer));
-    } catch (e) {
-      Get.log('Corrupted box, recovering backup file', isError: true);
-      final _file = await _getFile(true);
+      final file = await _getRandomFile();
+      await file.setPosition(0);
+      final buffer = Uint8List(await file.length());
+      await file.readInto(buffer);
 
-      final content = await _file.readAsString()
-        ..trim();
+      final decoded = jsonDecode(utf8.decode(buffer));
+      if (decoded is! Map) {
+        throw const FormatException('Stored value is not a JSON object.');
+      }
+      subject.value = Map<String, dynamic>.from(decoded);
+    } on Object {
+      final backup = await _getFile(true);
+      final content = (await backup.readAsString()).trim();
 
       if (content.isEmpty) {
-        subject.value = {};
+        subject.value = <String, dynamic>{};
       } else {
         try {
-          subject.value = (json.decode(content) as Map<String, dynamic>?) ?? {};
-        } catch (e) {
-          Get.log('Can not recover Corrupted box', isError: true);
-          subject.value = {};
+          final decoded = jsonDecode(content);
+          if (decoded is! Map) {
+            throw const FormatException('Backup is not a JSON object.');
+          }
+          subject.value = Map<String, dynamic>.from(decoded);
+        } on Object {
+          subject.value = <String, dynamic>{};
         }
       }
-      flush();
+
+      await flush();
     }
   }
 
   Future<RandomAccessFile> _getRandomFile() async {
-    if (_randomAccessfile != null) return _randomAccessfile!;
-    final fileDb = await _getFile(false);
-    _randomAccessfile = await fileDb.open(mode: FileMode.append);
+    final cached = _randomAccessFile;
+    if (cached != null) return cached;
 
-    return _randomAccessfile!;
+    final fileDb = await _getFile(false);
+    _randomAccessFile = await fileDb.open(mode: FileMode.append);
+    return _randomAccessFile!;
   }
 
   Future<File> _getFile(bool isBackup) async {
     final fileDb = await _fileDb(isBackup: isBackup);
-    if (!fileDb.existsSync()) {
-      fileDb.createSync(recursive: true);
+    if (!await fileDb.exists()) {
+      await fileDb.create(recursive: true);
     }
     return fileDb;
   }
 
   Future<File> _fileDb({required bool isBackup}) async {
-    final dir = await _getImplicitDir();
-    final _path = await _getPath(isBackup, path ?? dir.path);
-    final _file = File(_path);
-    return _file;
-  }
-
-  Future<Directory> _getImplicitDir() async {
-    try {
-      return getApplicationDocumentsDirectory();
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  Future<String> _getPath(bool isBackup, String? path) async {
-    final _isWindows = GetPlatform.isWindows;
-    final _separator = _isWindows ? '\\' : '/';
-    return isBackup
-        ? '$path$_separator$fileName.bak'
-        : '$path$_separator$fileName.gs';
+    final basePath = path ?? (await getApplicationDocumentsDirectory()).path;
+    final extension = isBackup ? 'bak' : 'gs';
+    final filePath =
+        '$basePath${Platform.pathSeparator}$fileName.$extension';
+    return File(filePath);
   }
 }

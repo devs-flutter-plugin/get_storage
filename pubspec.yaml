@@ -1,18 +1,21 @@
 name: get_storage
 description: Fast, lightweight synchronous key-value storage for Flutter with native, web, and WebAssembly support.
-version: 2.2.0
+version: 2.2.1
 homepage: https://github.com/devs-flutter-plugin/get_storage
 repository: https://github.com/devs-flutter-plugin/get_storage
 issue_tracker: https://github.com/devs-flutter-plugin/get_storage/issues
 
 environment:
   sdk: ">=3.13.0 <4.0.0"
-  flutter: ">=3.47.0"
+  flutter: ">=3.47.2"
 
 dependencies:
   flutter:
     sdk: flutter
-  get: ^4.7.3
+  get:
+    git:
+      url: https://github.com/devs-flutter-plugin/getx.git
+      ref: v4.7.4
   path_provider: ^2.1.6
   web: ^1.1.1
 

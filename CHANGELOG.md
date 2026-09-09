@@ -1,3 +1,7 @@
+## [2.2.2]
+- Fix `ValueStorage<T>` nullability with GetX `v4.7.4` by exposing the non-null value invariant in one place.
+- Fix Web/Wasm compile errors caused by `Value<T>.value` being typed as `T?`.
+
 ## [2.2.1]
 - Point the `get` dependency to `devs-flutter-plugin/getx` tag `v4.7.4`.
 - Align the minimum Flutter version to 3.47.2.

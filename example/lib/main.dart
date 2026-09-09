@@ -1,38 +1,45 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-
 import 'package:get_storage/get_storage.dart';
 
-void main() async {
+Future<void> main() async {
   await GetStorage.init();
-  runApp(App());
+  runApp(const App());
 }
 
-class Controller extends GetxController {
-  final box = GetStorage();
-  bool get isDark => box.read('darkmode') ?? false;
-  ThemeData get theme => isDark ? ThemeData.dark() : ThemeData.light();
-  void changeTheme(bool val) => box.write('darkmode', val);
+class App extends StatefulWidget {
+  const App({super.key});
+
+  @override
+  State<App> createState() => _AppState();
 }
 
-class App extends StatelessWidget {
+class _AppState extends State<App> {
+  final GetStorage _box = GetStorage();
+
+  bool get _isDark => _box.read<bool>('darkmode') ?? false;
+
+  Future<void> _changeTheme(bool value) async {
+    await _box.write('darkmode', value);
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(Controller());
-    return Observer(builder: (_) {
-      return MaterialApp(
-        theme: controller.theme,
-        home: Scaffold(
-          appBar: AppBar(title: Text("Get Storage")),
-          body: Center(
-            child: SwitchListTile(
-              value: controller.isDark,
-              title: Text("Touch to change ThemeMode"),
-              onChanged: controller.changeTheme,
-            ),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true),
+      darkTheme: ThemeData.dark(useMaterial3: true),
+      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Get Storage')),
+        body: Center(
+          child: SwitchListTile(
+            value: _isDark,
+            title: const Text('Use dark theme'),
+            onChanged: _changeTheme,
           ),
         ),
-      );
-    });
+      ),
+    );
   }
 }

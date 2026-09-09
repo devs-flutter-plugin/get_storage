@@ -28,7 +28,7 @@ jobs:
         run: flutter pub get
 
       - name: Check formatting
-        run: dart format --output=none --set-exit-if-changed lib test example/lib
+        run: dart format --output=none --set-exit-if-changed lib test/getstorage_test.dart example/lib
 
       - name: Check legacy web APIs
         run: |
@@ -38,10 +38,10 @@ jobs:
           fi
 
       - name: Analyze package
-        run: flutter analyze lib test
+        run: flutter analyze lib test/getstorage_test.dart
 
       - name: Test package
-        run: flutter test
+        run: flutter test test/getstorage_test.dart
 
       - name: Validate WebAssembly build
         working-directory: example

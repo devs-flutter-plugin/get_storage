@@ -4,7 +4,7 @@ A fast, lightweight key-value storage for Flutter, maintained by Devs Tecnologia
 
 ## Compatibility
 
-- Flutter 3.47+
+- Flutter 3.47.2+
 - Dart 3.13+
 - Android
 - iOS
@@ -15,6 +15,8 @@ A fast, lightweight key-value storage for Flutter, maintained by Devs Tecnologia
 - Flutter Web (WebAssembly / Wasm)
 
 Native platforms persist data using files in the application documents directory. Web platforms use `window.localStorage` through `package:web`, without `dart:html`.
+
+This fork uses the organization-maintained GetX package from `devs-flutter-plugin/getx` pinned to tag `v4.7.4`.
 
 ## Usage
 

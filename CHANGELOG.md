@@ -1,3 +1,7 @@
+## [2.2.1]
+- Point the `get` dependency to `devs-flutter-plugin/getx` tag `v4.7.4`.
+- Align the minimum Flutter version to 3.47.2.
+
 ## [2.2.0]
 - Update minimum toolchain to Flutter 3.47 / Dart 3.13.
 - Add WebAssembly compatibility using `package:web` and `dart.library.js_interop`.

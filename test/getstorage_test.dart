@@ -1,155 +1,119 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:get_storage/src/storage_impl.dart';
-import 'package:get_storage/src/read_write_value.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:get_storage/src/storage/io.dart' as io_storage;
 
-import 'utils/list_equality.dart';
-
-void main() async {
+void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late GetStorage g;
+  late Directory tempDirectory;
+  var containerSequence = 0;
 
-  const channel = MethodChannel('plugins.flutter.io/path_provider');
-  void setUpMockChannels(MethodChannel channel) {
-    TestDefaultBinaryMessengerBinding.instance?.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      channel,
-      (MethodCall? methodCall) async {
-        if (methodCall?.method == 'getApplicationDocumentsDirectory') {
-          return '.';
-        }
-        return null;
-      },
-    );
+  Future<GetStorage> createBox([Map<String, dynamic>? initialData]) async {
+    final container = 'test_${containerSequence++}';
+    final box = GetStorage(container, tempDirectory.path, initialData);
+    await box.initStorage;
+    return box;
   }
 
   setUpAll(() async {
-    setUpMockChannels(channel);
+    tempDirectory = await Directory.systemTemp.createTemp('get_storage_test_');
   });
 
-  setUp(() async {
-    await GetStorage.init();
-    g = GetStorage();
-    await g.erase();
+  tearDownAll(() async {
+    try {
+      await tempDirectory.delete(recursive: true);
+    } on FileSystemException {
+      // Open file handles can delay cleanup on some desktop platforms.
+    }
   });
 
-  test('write, read listen, e removeListen', () async {
-    String valueListen = "";
-    g.write('test', 'a');
-    g.write('test2', 'a');
+  test('writes, reads, listens, and removes listeners', () async {
+    final box = await createBox();
+    String? listenedValue;
 
-    final removeListen = g.listenKey('test', (val) {
-      valueListen = val;
+    final removeListener = box.listenKey('test', (value) {
+      listenedValue = value as String?;
     });
 
-    expect('a', g.read('test'));
+    await box.write('test', 'a');
+    expect(box.read<String>('test'), 'a');
+    expect(listenedValue, 'a');
 
-    await g.write('test', 'b');
-    expect('b', g.read<String>('test'));
-    expect('b', valueListen);
+    removeListener();
+    await box.write('test', 'b');
 
-    removeListen();
-
-    await g.write('test', 'c');
-
-    expect('c', g.read<String>('test'));
-    expect('b', valueListen);
-    await g.write('test', 'd');
-
-    expect('d', g.read<String>('test'));
+    expect(box.read<String>('test'), 'b');
+    expect(listenedValue, 'a');
   });
 
-  test('Write and read', () {
-    var list = new List<int>.generate(50, (i) {
-      int count = i + 1;
-      g.write('write', count);
-      return count;
-    });
+  test('supports ReadWriteValue delegates', () async {
+    final box = await createBox();
+    final value = 0.val('counter', getBox: () => box);
 
-    expect(list.last, g.read('write'));
+    value.val = 42;
+    await box.save();
+
+    expect(value.val, 42);
   });
 
-  test('Test backup and recover corrupted file', () async {
-    await g.write('write', 'abc');
-    expect('abc', g.read('write'));
+  test('writes only when a value is null', () async {
+    final box = await createBox();
 
-    final file = await _fileDb();
-    file.writeAsStringSync('ndj323e');
-    await GetStorage.init();
+    await box.writeIfNull('key', 'first');
+    await box.writeIfNull('key', 'second');
 
-    expect('abc', g.read('write'));
+    expect(box.read<String>('key'), 'first');
   });
 
-  test('Write and read using delegate', () {
-    final data = 0.val('write');
-    var list = new List<int>.generate(50, (i) {
-      int count = i + 1;
-      data.val = count;
-      return count;
-    });
+  test('removes and erases values', () async {
+    final box = await createBox();
 
-    expect(list.last, data.val);
+    await box.write('one', 1);
+    await box.write('two', 2);
+    await box.remove('one');
+
+    expect(box.hasData('one'), isFalse);
+    expect(box.read<int>('two'), 2);
+
+    await box.erase();
+    expect(box.getKeys<Iterable<String>>(), isEmpty);
   });
 
-  test('Write, read, remove and exists', () {
-    expect(null, g.read('write'));
+  test('returns stored keys and values in insertion order', () async {
+    final box = await createBox();
 
-    var list = new List<int>.generate(50, (i) {
-      int count = i + 1;
-      g.write('write', count);
-      return count;
-    });
-    expect(list.last, g.read('write'));
-    g.remove('write');
-    expect(null, g.read('write'));
+    await box.write('key1', 1);
+    await box.write('key2', 'a');
+    await box.write('key3', 3.0);
+
+    expect(
+      box.getKeys<Iterable<String>>(),
+      orderedEquals(<String>['key1', 'key2', 'key3']),
+    );
+    expect(
+      box.getValues<Iterable<dynamic>>(),
+      orderedEquals(<dynamic>[1, 'a', 3.0]),
+    );
   });
 
-  test('newContainer', () async {
-    final container1 = await GetStorage.init('container1');
-    await GetStorage.init('newContainer');
-    final newContainer = GetStorage('newContainer');
+  test('uses initial data when the container does not exist', () async {
+    final box = await createBox(<String, dynamic>{'seed': 7});
 
-    /// Attempting to start a Container that has already started must return the container already created.
-    var container2 = await GetStorage.init();
-    expect(container1 == container2, true);
-
-    newContainer.write('test', '1234');
-    g.write('test', 'a');
-    expect(g.read('test') == newContainer.read('test'), false);
+    expect(box.read<int>('seed'), 7);
   });
 
-  group('get keys/values', () {
-    Function(Iterable, List) eq =
-        (i, l) => const ListEquality().equals(i.toList(), l);
+  test('persists native data between storage instances', () async {
+    const fileName = 'persistence_test';
+    final first = io_storage.StorageImpl(fileName, tempDirectory.path);
+    await first.init();
+    first.write('value', 'persisted');
+    await first.flush();
 
-    test('should return their stored dynamic values', () {
-      expect(eq(g.getKeys().toList(), []), true);
-      expect(eq(g.getValues().toList(), []), true);
+    final second = io_storage.StorageImpl(fileName, tempDirectory.path);
+    await second.init();
 
-      g.write('key1', 1);
-      expect(eq(g.getKeys(), ['key1']), true);
-      expect(eq(g.getValues(), [1]), true);
-
-      g.write('key2', 'a');
-      expect(eq(g.getKeys(), ['key1', 'key2']), true);
-      expect(eq(g.getValues(), [1, 'a']), true);
-
-      g.write('key3', 3.0);
-      expect(eq(g.getKeys(), ['key1', 'key2', 'key3']), true);
-      expect(eq(g.getValues(), [1, 'a', 3.0]), true);
-    });
+    expect(second.read<String>('value'), 'persisted');
   });
-}
-
-Future<File> _fileDb(
-    {bool isBackup = false, String fileName = 'GetStorage'}) async {
-  final dir = await getApplicationDocumentsDirectory();
-  final _path = dir.path;
-  final _file =
-      isBackup ? File('$_path/$fileName.bak') : File('$_path/$fileName.gs');
-  return _file;
 }

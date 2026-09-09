@@ -1,34 +1,51 @@
-#The name of your workflow.
-name: build
-# Trigger the workflow on push or pull request
+name: CI
+
 on:
   push:
     branches: [master]
   pull_request:
     branches: [master]
-#A workflow run is made up of one or more jobs. Jobs run in parallel by default.
+
 jobs:
-  test:
-    #The type of machine to run the job on. [windows,macos, ubuntu , self-hosted]
-    defaults:
-      run:
-        working-directory: ./
-    runs-on: ubuntu-latest
-    #sequence of tasks called
+  validate:
+    runs-on: self-hosted
+
     steps:
-      # The branch or tag ref that triggered the workflow will be checked out.
-      # https://github.com/actions/checkout
-      - uses: actions/checkout@v3
-      # Setup a flutter environment.
-      # https://github.com/marketplace/actions/flutter-action
-      - uses: subosito/flutter-action@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.7.3"
-          channel: "stable"
-      - run: flutter pub get
-      #- run: flutter analyze
-      # run  flutter widgets tests  and unit tests
-      - run: flutter test --coverage
-      # Upload coverage reports to Codecov
-      # https://github.com/marketplace/actions/codecov
-      - uses: codecov/codecov-action@v1.0.7
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Toolchain
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test example/lib
+
+      - name: Check legacy web APIs
+        run: |
+          if grep -R "dart:html\|dart:js'\|package:js/" lib; then
+            echo "Legacy web API import found."
+            exit 1
+          fi
+
+      - name: Analyze package
+        run: flutter analyze lib test
+
+      - name: Test package
+        run: flutter test
+
+      - name: Validate WebAssembly build
+        working-directory: example
+        run: |
+          flutter pub get
+          flutter analyze lib
+          flutter build web --wasm

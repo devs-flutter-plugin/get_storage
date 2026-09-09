@@ -22,10 +22,8 @@ void main() {
   });
 
   tearDownAll(() async {
-    try {
+    if (await tempDirectory.exists()) {
       await tempDirectory.delete(recursive: true);
-    } on FileSystemException {
-      // Open file handles can delay cleanup on some desktop platforms.
     }
   });
 

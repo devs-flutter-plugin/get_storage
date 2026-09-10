@@ -8,7 +8,9 @@ on:
 
 jobs:
   validate:
-    runs-on: self-hosted
+    runs-on:
+      - self-hosted
+      - devs-flutter-plugin-ci
 
     steps:
       - name: Checkout
